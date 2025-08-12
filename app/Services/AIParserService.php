@@ -3,60 +3,75 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class AIParserService extends Helper
 {
     protected $apiKey;
 
-    public function __construct(string $apiKey)
-    {
-        $this->apiKey = $apiKey;
-    }
+    // Kita tidak butuh constructor jika API Key diambil dari Service Provider
+    // public function __construct(string $apiKey)
+    // {
+    //     $this->apiKey = $apiKey;
+    // }
 
     public function parseWithAI(string $text): ?array
     {
-        $apiKey = env('COHERE_API_KEY');
+        // Ambil API key dari file .env
+        $apiKey = config('services.cohere.key');
+        if (!$apiKey) {
+            Log::error('COHERE_API_KEY tidak ditemukan.');
+            return null;
+        }
+
+        // Prompt tidak perlu Heredoc jika sederhana, ini lebih aman
         $prompt = <<<PROMPT
-            Ubah teks struk belanja berikut menjadi format JSON tanpa penjelasan tambahan apapun. cukup hasilkan JSON yang berisi informasi penting seperti nama produk, harga, jumlah, dan total belanja.
-            
-            Contoh format JSON yang diharapkan:
-            {
-                date: "12 Oct 2023",
-                "items": [
-                    {
-                        "name": "Produk A",
-                        "quantity": 2,
-                        "price": 10000,
-                        "subtotal": 20000
-                    },
-                    {
-                        "name": "Produk B",
-                        "quantity": 1,
-                        "price": 15000,
-                        subtotal: 15000
-                    }
-                ],
-                "total": 35000
-                }
+Ubah teks struk belanja berikut menjadi format JSON.
+Hanya ekstrak informasi berikut: tanggal transaksi, daftar item yang dibeli (nama, jumlah, harga satuan, subtotal), dan total akhir belanja.
 
-                Teks struk belanja:
-                $text
-            PROMPT;
+PENTING:
+1. Abaikan semua teks yang bukan merupakan item belanja, seperti nama toko, alamat, info kasir, subtotal, PPN/VAT, info pembayaran (tunai/kembalian), dan ucapan terima kasih.
+2. Pastikan format JSON yang dihasilkan valid dan tidak ada penjelasan tambahan apapun.
 
-        $response = \Http::withToken($apiKey)
+Contoh format JSON yang diharapkan:
+{
+    "date": "10/01/2024",
+    "items": [
+        { "name": "Teh", "qty": 2, "price": 5000, "subtotal": 10100 },
+        { "name": "Muscat cookie", "qty": 1, "price": 10000, "subtotal": 10000 }
+    ],
+    "total": 22110
+}
+
+Teks struk belanja:
+{$text}
+PROMPT;
+
+        $response = Http::withToken($apiKey)
+            ->timeout(60) // Tambahkan timeout untuk mencegah request gantung
             ->post('https://api.cohere.ai/v1/generate', [
-                'model' => 'command-xlarge-nightly',
+                'model' => 'command', // Model yang lebih umum dan stabil
                 'prompt' => $prompt,
-                'max_tokens' => 500,
-                'temperature' => 0.2,
+                'max_tokens' => 1024, // Perbesar token untuk struk panjang
+                'temperature' => 0.1,
             ]);
         
         if (! $response->successful()) {
+            Log::error('Panggilan ke Cohere API gagal', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
             return null;
         }
 
         $raw = $response->json('generations.0.text');
-        $onlyJson = $this->cleanCoheretResponse($raw);
+        
+        if (!$raw) {
+            return null;
+        }
+
+        // Panggil nama method yang sudah diperbaiki
+        $onlyJson = $this->cleanCohereResponse($raw);
         
         return $onlyJson;
     }

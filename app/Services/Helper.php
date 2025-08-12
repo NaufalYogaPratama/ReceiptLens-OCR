@@ -2,25 +2,29 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Log;
+
 class Helper
 {
-    /**
-     * Clean the response from the AI service to ensure it is valid JSON.
-     *
-     * @param string $rawResponse
-     * @return string
-     */
-    public function cleanCoherentResponse(string $responseText): ?array
+    // Ubah nama method agar konsisten (Cohere bukan Coherent)
+    public function cleanCohereResponse(string $responseText): ?array
     {
-        $cleaned = trim(preg_replace('/^.*?(\[|\{)/', '$1', $responseText));
-        
-        $closingPos = strrpos($cleaned, ']');
-        if ($closingPos === false) {
-            $closingPos = strrpos($cleaned, '}');
+        // Cari posisi kurung kurawal pembuka pertama
+        $firstBrace = strpos($responseText, '{');
+        // Cari posisi kurung kurawal penutup terakhir
+        $lastBrace = strrpos($responseText, '}');
+
+        // Jika salah satunya tidak ditemukan, proses tidak bisa lanjut
+        if ($firstBrace === false || $lastBrace === false) {
+            Log::warning('JSON tidak ditemukan dalam respons AI.', ['response' => $responseText]);
+            return null;
         }
 
-        if ($closingPos !== false) {
-            $cleaned = substr($cleaned, 0, $closingPos + 1);
+        // Ambil string di antara kurung kurawal pertama dan terakhir
+        $cleaned = substr($responseText, $firstBrace, $lastBrace - $firstBrace + 1);
+
+        if (empty(trim($cleaned))) {
+            return null;
         }
 
         try {
@@ -30,7 +34,6 @@ class Helper
                 'response' => $responseText,
                 'cleaned' => $cleaned,
             ]);
-
             return null;
         }
     }

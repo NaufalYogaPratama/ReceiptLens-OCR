@@ -3,7 +3,6 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ExpenseResource\Pages;
-use App\Filament\Resources\ExpenseResource\RelationManagers;
 use App\Models\Expense;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -11,7 +10,8 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ImageColumn;
 
 class ExpenseResource extends Resource
 {
@@ -19,11 +19,24 @@ class ExpenseResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->withSum('items', 'qty');
+    }
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                //
+                Forms\Components\TextInput::make('title')
+                    ->label('Judul')
+                    ->required(),
+                Forms\Components\FileUpload::make('receipt_image')
+                    ->label('Foto Struk')
+                    ->image()
+                    ->directory('receipts')
+                    ->preserveFilenames()
+                    ->required(),
             ]);
     }
 
@@ -31,7 +44,23 @@ class ExpenseResource extends Resource
     {
         return $table
             ->columns([
-                //
+                TextColumn::make('title')
+                    ->label('Judul')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('date_shopping')
+                    ->label('Tanggal Belanja')
+                    ->date()
+                    ->sortable(),
+                TextColumn::make('amount')
+                    ->label('Total')
+                    ->money('idr'),
+                ImageColumn::make('receipt_image')
+                    ->label('Gambar Struk'),
+                // Menampilkan hasil dari 'withSum'
+                TextColumn::make('items_sum_qty')
+                    ->label('Jumlah Item')
+                    ->alignEnd(),
             ])
             ->filters([
                 //
